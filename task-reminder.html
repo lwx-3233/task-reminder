@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重要事务记录与提醒</title>
+    <!-- 引入Tailwind CSS用于快速构建美观界面 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- 配置自定义颜色（蓝白为主，紫色点缀） -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF', // 主蓝色
+                        secondary: '#722ED1', // 点缀紫色
+                        neutral: '#F5F7FA', // 浅白背景
+                        dark: '#1D2129', // 文字主色
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .task-card-shadow {
+                box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.08);
+            }
+            .btn-hover {
+                transition: all 0.2s ease;
+            }
+            .btn-hover:hover {
+                transform: translateY(-2px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-neutral min-h-screen font-sans text-dark">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-bell text-primary text-2xl"></i>
+                <h1 class="text-xl md:text-2xl font-bold text-primary">重要事务提醒</h1>
+            </div>
+            <button id="notifyPermissionBtn" class="bg-primary/10 text-primary px-3 py-2 rounded-lg btn-hover">
+                <i class="fa-solid fa-bell-slash mr-1"></i>
+                <span>开启通知权限</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- 任务添加表单 -->
+        <section class="bg-white rounded-xl p-6 mb-8 task-card-shadow">
+            <h2 class="text-lg font-semibold mb-4 flex items-center">
+                <i class="fa-solid fa-plus-circle text-secondary mr-2"></i>
+                添加新事务
+            </h2>
+            <form id="taskForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label for="taskTitle" class="block text-sm font-medium mb-1">事务标题 <span class="text-red-500">*</span></label>
+                    <input type="text" id="taskTitle" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" placeholder="请输入事务标题（如：项目汇报、会议提醒）" required>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="taskDesc" class="block text-sm font-medium mb-1">事务描述</label>
+                    <textarea id="taskDesc" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" rows="2" placeholder="请输入事务详细描述（可选）"></textarea>
+                </div>
+                <div>
+                    <label for="reminderTime" class="block text-sm font-medium mb-1">提醒时间 <span class="text-red-500">*</span></label>
+                    <input type="datetime-local" id="reminderTime" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" required>
+                </div>
+                <div>
+                    <label for="taskPriority" class="block text-sm font-medium mb-1">优先级</label>
+                    <select id="taskPriority" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+                        <option value="low">低</option>
+                        <option value="medium" selected>中</option>
+                        <option value="high">高</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2 flex justify-end gap-3">
+                    <button type="reset" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 btn-hover">
+                        <i class="fa-solid fa-refresh mr-1"></i>重置
+                    </button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg btn-hover">
+                        <i class="fa-solid fa-save mr-1"></i>保存事务
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- 任务列表 -->
+        <section>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold flex items-center">
+                    <i class="fa-solid fa-list-check text-secondary mr-2"></i>
+                    我的事务列表
+                </h2>
+                <div class="flex gap-2">
+                    <button id="sortByTime" class="px-3 py-1 bg-white border border-gray-200 rounded-lg text-sm btn-hover">
+                        <i class="fa-solid fa-clock mr-1"></i>按时间排序
+                    </button>
+                    <button id="clearCompleted" class="px-3 py-1 bg-secondary/10 text-secondary rounded-lg text-sm btn-hover">
+                        <i class="fa-solid fa-trash mr-1"></i>清空已完成
+                    </button>
+                </div>
+            </div>
+
+            <!-- 空状态提示 -->
+            <div id="emptyState" class="bg-white rounded-xl p-12 text-center task-card-shadow">
+                <i class="fa-solid fa-clipboard-list text-gray-300 text-5xl mb-4"></i>
+                <p class="text-gray-500">暂无事务记录，添加你的第一个重要事务吧！</p>
+            </div>
+
+            <!-- 任务列表容器 -->
+            <div id="taskList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </section>
+    </main>
+
+    <!-- 编辑任务模态框 -->
+    <div id="editModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md task-card-shadow">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-primary">编辑事务</h3>
+                <button id="closeModal" class="text-gray-400 hover:text-gray-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <form id="editTaskForm" class="grid grid-cols-1 gap-4">
+                <input type="hidden" id="editTaskId">
+                <div>
+                    <label for="editTaskTitle" class="block text-sm font-medium mb-1">事务标题 <span class="text-red-500">*</span></label>
+                    <input type="text" id="editTaskTitle" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" required>
+                </div>
+                <div>
+                    <label for="editTaskDesc" class="block text-sm font-medium mb-1">事务描述</label>
+                    <textarea id="editTaskDesc" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" rows="2"></textarea>
+                </div>
+                <div>
+                    <label for="editReminderTime" class="block text-sm font-medium mb-1">提醒时间 <span class="text-red-500">*</span></label>
+                    <input type="datetime-local" id="editReminderTime" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" required>
+                </div>
+                <div>
+                    <label for="editTaskPriority" class="block text-sm font-medium mb-1">优先级</label>
+                    <select id="editTaskPriority" class="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary">
+                        <option value="low">低</option>
+                        <option value="medium">中</option>
+                        <option value="high">高</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-3 mt-2">
+                    <button type="button" id="cancelEdit" class="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 btn-hover">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg btn-hover">保存修改</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let tasks = [];
+        const AUDIO_ALERT = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3');
+        
+        // DOM加载完成后初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化本地存储数据
+            initTasks();
+            // 渲染任务列表
+            renderTasks();
+            // 绑定事件监听
+            bindEvents();
+            // 检查通知权限
+            checkNotificationPermission();
+            // 检查待提醒的任务
+            checkReminders();
+            // 定时检查提醒（每分钟检查一次）
+            setInterval(checkReminders, 60000);
+        });
+
+        // 初始化任务数据（从localStorage读取）
+        function initTasks() {
+            const storedTasks = localStorage.getItem('importantTasks');
+            if (storedTasks) {
+                tasks = JSON.parse(storedTasks);
+            }
+        }
+
+        // 保存任务到本地存储
+        function saveTasksToStorage() {
+            localStorage.setItem('importantTasks', JSON.stringify(tasks));
+        }
+
+        // 渲染任务列表
+        function renderTasks() {
+            const taskListEl = document.getElementById('taskList');
+            const emptyStateEl = document.getElementById('emptyState');
+            
+            // 空状态处理
+            if (tasks.length === 0) {
+                emptyStateEl.classList.remove('hidden');
+                taskListEl.classList.add('hidden');
+                return;
+            }
+            
+            emptyStateEl.classList.add('hidden');
+            taskListEl.classList.remove('hidden');
+            taskListEl.innerHTML = '';
+
+            // 渲染每个任务卡片
+            tasks.forEach(task => {
+                const priorityClass = {
+                    low: 'bg-green-100 text-green-800',
+                    medium: 'bg-blue-100 text-blue-800',
+                    high: 'bg-red-100 text-red-800'
+                }[task.priority];
+                
+                const priorityText = {
+                    low: '低',
+                    medium: '中',
+                    high: '高'
+                }[task.priority];
+
+                // 计算剩余时间
+                const now = new Date();
+                const reminderTime = new Date(task.reminderTime);
+                const isPast = reminderTime < now;
+                const isCompleted = task.completed;
+
+                // 任务卡片HTML
+                const taskCard = document.createElement('div');
+                taskCard.className = `bg-white rounded-xl p-4 task-card-shadow transition-all ${isCompleted ? 'opacity-70' : ''}`;
+                taskCard.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" ${isCompleted ? 'checked' : ''} data-id="${task.id}" class="task-completed-checkbox w-5 h-5 accent-secondary">
+                            <h3 class="${isCompleted ? 'line-through text-gray-500' : 'font-semibold'}">${task.title}</h3>
+                        </div>
+                        <span class="text-xs px-2 py-1 rounded-full ${priorityClass}">${priorityText}</span>
+                    </div>
+                    ${task.desc ? `<p class="text-sm text-gray-600 mb-3">${task.desc}</p>` : ''}
+                    <div class="text-sm text-gray-500 mb-3">
+                        <i class="fa-solid fa-bell mr-1"></i>
+                        ${formatDateTime(task.reminderTime)}
+                        ${isPast && !isCompleted ? '<span class="text-red-500 ml-2">（已过期）</span>' : ''}
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button data-id="${task.id}" class="edit-task-btn text-primary hover:text-secondary transition-colors">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button data-id="${task.id}" class="delete-task-btn text-gray-500 hover:text-red-500 transition-colors">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                
+                // 添加完成状态切换事件
+                taskCard.querySelector('.task-completed-checkbox').addEventListener('change', (e) => {
+                    toggleTaskCompleted(task.id, e.target.checked);
+                });
+                
+                // 添加编辑事件
+                taskCard.querySelector('.edit-task-btn').addEventListener('click', () => {
+                    openEditModal(task);
+                });
+                
+                // 添加删除事件
+                taskCard.querySelector('.delete-task-btn').addEventListener('click', () => {
+                    deleteTask(task.id);
+                });
+                
+                taskListEl.appendChild(taskCard);
+            });
+        }
+
+        // 绑定所有事件监听
+        function bindEvents() {
+            // 提交新任务
+            document.getElementById('taskForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                addNewTask();
+            });
+
+            // 开启通知权限
+            document.getElementById('notifyPermissionBtn').addEventListener('click', requestNotificationPermission);
+
+            // 按时间排序
+            document.getElementById('sortByTime').addEventListener('click', () => {
+                sortTasksByTime();
+            });
+
+            // 清空已完成任务
+            document.getElementById('clearCompleted').addEventListener('click', clearCompletedTasks);
+
+            // 关闭编辑模态框
+            document.getElementById('closeModal').addEventListener('click', closeEditModal);
+            document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+
+            // 提交编辑任务
+            document.getElementById('editTaskForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                saveEditedTask();
+            });
+        }
+
+        // 添加新任务
+        function addNewTask() {
+            const title = document.getElementById('taskTitle').value.trim();
+            const desc = document.getElementById('taskDesc').value.trim();
+            const reminderTime = document.getElementById('reminderTime').value;
+            const priority = document.getElementById('taskPriority').value;
+
+            // 创建新任务对象
+            const newTask = {
+                id: Date.now().toString(), // 用时间戳作为唯一ID
+                title,
+                desc,
+                reminderTime,
+                priority,
+                completed: false
+            };
+
+            // 添加到任务列表并保存
+            tasks.unshift(newTask);
+            saveTasksToStorage();
+            
+            // 重置表单并重新渲染
+            document.getElementById('taskForm').reset();
+            renderTasks();
+            
+            // 检查新任务的提醒
+            checkReminders();
+            
+            // 提示成功
+            alert('事务添加成功！');
+        }
+
+        // 切换任务完成状态
+        function toggleTaskCompleted(taskId, isCompleted) {
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                tasks[taskIndex].completed = isCompleted;
+                saveTasksToStorage();
+                renderTasks();
+            }
+        }
+
+        // 打开编辑模态框
+        function openEditModal(task) {
+            document.getElementById('editTaskId').value = task.id;
+            document.getElementById('editTaskTitle').value = task.title;
+            document.getElementById('editTaskDesc').value = task.desc;
+            document.getElementById('editReminderTime').value = task.reminderTime;
+            document.getElementById('editTaskPriority').value = task.priority;
+            
+            // 显示模态框
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        // 关闭编辑模态框
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        // 保存编辑后的任务
+        function saveEditedTask() {
+            const taskId = document.getElementById('editTaskId').value;
+            const title = document.getElementById('editTaskTitle').value.trim();
+            const desc = document.getElementById('editTaskDesc').value.trim();
+            const reminderTime = document.getElementById('editReminderTime').value;
+            const priority = document.getElementById('editTaskPriority').value;
+
+            // 更新任务信息
+            const taskIndex = tasks.findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+                tasks[taskIndex] = {
+                    ...tasks[taskIndex],
+                    title,
+                    desc,
+                    reminderTime,
+                    priority
+                };
+                
+                // 保存并重新渲染
+                saveTasksToStorage();
+                renderTasks();
+                closeEditModal();
+                
+                // 重新检查提醒
+                checkReminders();
+                
+                // 提示成功
+                alert('事务修改成功！');
+            }
+        }
+
+        // 删除任务
+        function deleteTask(taskId) {
+            if (confirm('确定要删除这个事务吗？删除后无法恢复！')) {
+                tasks = tasks.filter(t => t.id !== taskId);
+                saveTasksToStorage();
+                renderTasks();
+            }
+        }
+
+        // 按时间排序任务（最近提醒的在前）
+        function sortTasksByTime() {
+            tasks.sort((a, b) => new Date(a.reminderTime) - new Date(b.reminderTime));
+            saveTasksToStorage();
+            renderTasks();
+            alert('已按提醒时间排序！');
+        }
+
+        // 清空已完成任务
+        function clearCompletedTasks() {
+            if (tasks.some(t => t.completed) && confirm('确定要清空所有已完成的事务吗？')) {
+                tasks = tasks.filter(t => !t.completed);
+                saveTasksToStorage();
+                renderTasks();
+                alert('已清空所有已完成事务！');
+            } else if (!tasks.some(t => t.completed)) {
+                alert('暂无已完成的事务！');
+            }
+        }
+
+        // 检查通知权限
+        function checkNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('你的浏览器不支持桌面通知功能，请更换现代浏览器（如Chrome、Edge）！');
+                return;
+            }
+
+            const btn = document.getElementById('notifyPermissionBtn');
+            if (Notification.permission === 'granted') {
+                btn.innerHTML = '<i class="fa-solid fa-bell mr-1"></i>通知已开启';
+                btn.classList.remove('bg-primary/10', 'text-primary');
+                btn.classList.add('bg-green-100', 'text-green-700');
+            } else if (Notification.permission === 'denied') {
+                btn.innerHTML = '<i class="fa-solid fa-bell-slash mr-1"></i>通知已拒绝';
+                btn.classList.remove('bg-primary/10', 'text-primary');
+                btn.classList.add('bg-red-100', 'text-red-700');
+            }
+        }
+
+        // 请求通知权限
+        function requestNotificationPermission() {
+            if (!('Notification' in window)) {
+                alert('你的浏览器不支持桌面通知功能！');
+                return;
+            }
+
+            Notification.requestPermission().then(permission => {
+                checkNotificationPermission();
+            });
+        }
+
+        // 检查待提醒的任务
+        function checkReminders() {
+            const now = new Date();
+            // 误差范围：1分钟内的提醒都触发
+            const timeThreshold = 60000;
+
+            tasks.forEach(task => {
+                // 跳过已完成或已过期过久的任务
+                if (task.completed) return;
+                
+                const reminderTime = new Date(task.reminderTime);
+                const timeDiff = reminderTime - now;
+
+                // 提醒时间在1分钟内（包括已过期但不超过1分钟）
+                if (timeDiff >= 0 && timeDiff <= timeThreshold) {
+                    showReminderNotification(task);
+                }
+            });
+        }
+
+        // 显示提醒通知
+        function showReminderNotification(task) {
+            // 播放提醒音效
+            AUDIO_ALERT.play();
+
+            // 桌面通知
+            if (Notification.permission === 'granted') {
+                new Notification('重要事务提醒', {
+                    body: `${task.title}\n提醒时间：${formatDateTime(task.reminderTime)}`,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/802/802897.png',
+                    requireInteraction: true // 需手动关闭通知
+                });
+            }
+
+            // 页面内弹窗提醒
+            if (confirm(`📢 重要事务提醒：\n${task.title}\n\n是否标记为已完成？`)) {
+                toggleTaskCompleted(task.id, true);
+            }
+        }
+
+        // 格式化日期时间显示
+        function formatDateTime(datetimeStr) {
+            const date = new Date(datetimeStr);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+    </script>
+</body>
+</html>
